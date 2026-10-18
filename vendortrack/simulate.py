@@ -1,0 +1,81 @@
+"""Fictional demo register: a 300-person company (contoso.example) with 21 IT contracts, five budget lines and six
+months of SLA reports. Vendor names are Microsoft's fictional sample companies; people, prices and dates are invented.
+Faults are placed on purpose so every check has something to show (see README, "Try it")."""
+from __future__ import annotations
+
+import csv
+import json
+from pathlib import Path
+
+AS_OF = "2026-10-18"
+
+C_FIELDS = ["id", "vendor", "service", "category", "owner", "cost_type", "annual_cost", "start", "end", "auto_renew",
+            "notice_days", "renewal_months", "criticality", "alternative", "licences_purchased", "licences_used",
+            "unit_cost", "sla_target", "credit_pct", "budget_line"]
+
+# id, vendor, service, category, owner, type, annual, start, end, auto, notice, months, crit, alternative,
+# purchased, used, unit, sla, credit, budget line
+CONTRACTS = [
+    ("C001", "Northwind Telecom", "SD-WAN and MPLS, 4 sites", "Connectivity", "Marta Ruiz", "OPEX", 96000, "2024-01-01", "2026-12-31", "yes", 60, 12, "high", "", "", "", "", 99.95, 5, "Network"),
+    ("C002", "Northwind Telecom", "Internet lines, 2 x 1 Gbps", "Connectivity", "Marta Ruiz", "OPEX", 18000, "2025-03-01", "2027-02-28", "yes", 90, 12, "high", "4G backup router per site", "", "", "", 99.9, 10, "Network"),
+    ("C003", "Fabrikam Hardware", "Laptop and desktop warranty extension", "Hardware support", "Diego Martín", "OPEX", 24000, "2025-11-15", "2026-11-14", "no", 30, 12, "medium", "Spare pool of 10 laptops", "", "", "", "", "", "End-user services"),
+    ("C004", "Litware Licensing", "Productivity suite licences (E3)", "Software licences", "Diego Martín", "OPEX", 108000, "2024-07-01", "2027-06-30", "yes", 30, 12, "high", "Monthly plan at list price", 300, 312, 360, "", "", "Software"),
+    ("C005", "Litware Licensing", "AI assistant add-on", "Software licences", "Diego Martín", "OPEX", 21600, "2026-03-01", "2027-02-28", "yes", 30, 12, "low", "", 60, 34, 360, "", "", "Software"),
+    ("C006", "Tailspin Cloud", "Cloud IaaS, reserved capacity", "Cloud", "Laura Gómez", "OPEX", 72000, "2025-01-01", "2027-12-31", "no", "", 12, "high", "Landing zone in a second provider documented", "", "", "", 99.9, "", "Infrastructure"),
+    ("C007", "Proseware Networks", "Firewall support and security subscriptions", "Security", "Marta Ruiz", "OPEX", 15600, "2025-10-01", "2026-09-30", "no", 30, 12, "high", "Spare unit of the same model", "", "", "", "", "", "Security and backup"),
+    ("C008", "Woodgrove Security", "Endpoint protection (EDR)", "Security", "Laura Gómez", "OPEX", 30000, "2024-12-01", "2025-11-30", "yes", 60, 12, "high", "Built-in OS protection as fallback", 320, 305, 93.75, "", "", "Security and backup"),
+    ("C009", "Wingtip SaaS", "IT service management tool", "Software licences", "Diego Martín", "OPEX", 19200, "2025-02-01", "2027-01-31", "yes", 90, 12, "medium", "Export of tickets and CMDB tested", 25, 18, 768, "", "", "Software"),
+    ("C010", "Adatum Print", "Managed print service, 18 devices", "Printing", "", "OPEX", 14400, "2023-06-01", "2027-05-31", "yes", 90, 12, "low", "", "", "", "", 95, 3, "End-user services"),
+    ("C011", "Coho Backup", "Backup SaaS for Microsoft 365 and servers", "Backup", "Laura Gómez", "OPEX", 12600, "2025-05-01", "2027-04-30", "yes", 60, 12, "high", "Immutable copy kept 30 days in a second region", "", "", "", 99.9, "", "Security and backup"),
+    ("C012", "Lucerne Datacenter", "Colocation, 2 racks", "Data centre", "Marta Ruiz", "OPEX", 38400, "2024-04-01", "2027-03-31", "yes", 180, 24, "high", "Exit plan reviewed in March", "", "", "", 99.99, 5, "Infrastructure"),
+    ("C013", "Fourth Coffee AV", "Meeting room AV support, 12 rooms", "AV", "Diego Martín", "OPEX", 9600, "2025-12-01", "2026-11-30", "no", 30, 12, "medium", "Second integrator quoted", "", "", "", "", "", "End-user services"),
+    ("C014", "Trey Research", "Out-of-hours service desk", "Managed service", "Laura Gómez", "OPEX", 42000, "2025-07-01", "2027-06-30", "yes", 90, 12, "medium", "Rota with the internal team", "", "", "", 90, "", "End-user services"),
+    ("C015", "Fabrikam Hardware", "Laptop leasing, 120 units", "Hardware", "Diego Martín", "OPEX", 52800, "2024-10-01", "2027-09-30", "no", 90, 12, "medium", "Buy-out option in the lease", "", "", "", "", "", "End-user services"),
+    ("C016", "Relecloud", "Mobile fleet, 140 lines", "Connectivity", "Marta Ruiz", "OPEX", 33600, "2025-01-15", "2027-01-14", "yes", 60, 12, "medium", "Number porting to any operator", 140, 108, 240, "", "", "Network"),
+    ("C017", "VanArsdel", "Wiki and issue tracker", "Software licences", "Diego Martín", "OPEX", 8400, "2025-12-01", "2026-11-30", "yes", 30, 12, "medium", "Export to Markdown tested", 100, 97, 84, "", "", "Software"),
+    ("C018", "Lamna Certificates", "TLS certificates and DNS hosting", "Security", "", "OPEX", 1800, "2025-11-20", "2026-11-19", "no", 30, 12, "high", "Second DNS provider as secondary", "", "", "", "", "", "Security and backup"),
+    ("C019", "Contoso Facilities", "UPS maintenance, server room", "Facilities", "Marta Ruiz", "OPEX", 3600, "2024-06-01", "", "no", "", 12, "medium", "Battery spares on site", "", "", "", "", "", "Infrastructure"),
+    ("C020", "Adventure Works Cabling", "Structured cabling call-off", "Network", "Marta Ruiz", "OPEX", 6000, "2025-01-01", "2027-12-31", "yes", "", 12, "low", "", "", "", "", "", "", "Network"),
+    ("C021", "Proseware Networks", "Wi-Fi refresh, access points with 3-year support", "Network", "Marta Ruiz", "CAPEX", 28000, "2026-04-01", "2029-03-31", "no", 90, 12, "medium", "Controller config backed up", "", "", "", "", "", "Capital projects"),
+]
+
+BUDGET = [  # line, owner, annual budget, actual year to date
+    ("Network", "Marta Ruiz", 150000, 128000),
+    ("Software", "Diego Martín", 160000, 145000),
+    ("Security and backup", "Laura Gómez", 70000, 46000),
+    ("Infrastructure", "Marta Ruiz", 110000, 88000),
+    ("End-user services", "Diego Martín", 160000, 120000),
+    ("Capital projects", "Head of IT", 40000, 28000),
+]
+
+MONTHS = ["2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09"]
+SLA = {
+    "C001": [99.99, 99.97, 99.98, 99.96, 99.99, 99.98],
+    "C002": [99.95, 99.99, 99.97, 99.98, 99.93, 99.99],
+    "C006": [99.99, 99.98, 99.99, 99.97, 99.99, 99.99],
+    "C010": [96.1, 95.4, 97.0, 93.8, 94.5, 96.2],
+    "C011": [99.95, 99.97, 99.92, 99.96, 99.81, 99.95],
+    "C012": [100, 99.99, 100, 100, 99.99, 100],
+    "C014": [91.2, 92.5, 90.8, 91.9, 93.0, None],   # September report not received
+}
+
+
+def write(folder: Path) -> Path:
+    folder.mkdir(parents=True, exist_ok=True)
+    with open(folder / "contracts.csv", "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(C_FIELDS)
+        w.writerows(CONTRACTS)
+    with open(folder / "budget.csv", "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["line", "owner", "budget", "actual_ytd"])
+        w.writerows(BUDGET)
+    with open(folder / "sla.csv", "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["contract_id", "month", "achieved"])
+        for cid, values in SLA.items():
+            w.writerows([cid, m, v] for m, v in zip(MONTHS, values) if v is not None)
+    (folder / "settings.json").write_text(json.dumps(
+        {"organisation": "Contoso Iberia (fictional)", "currency": "EUR", "as_of": AS_OF,
+         "fiscal_year_start": "2026-01-01"}, indent=2) + "\n", encoding="utf-8")
+    return folder
